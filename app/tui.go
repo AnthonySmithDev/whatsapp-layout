@@ -1,4 +1,4 @@
-package tui
+package app
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/AnthonySmithDev/whatsapp-tui-layout/app"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -199,8 +198,8 @@ func parseJID(arg string) (types.JID, bool) {
 func initialModel() model {
 	listGroup := []list.Item{}
 
-	var conversations []app.Conversation
-	err := app.Driver.Open(app.Conversation{}).Get().AsEntity(&conversations)
+	var conversations []Conversation
+	err := Driver.Open(Conversation{}).Get().AsEntity(&conversations)
 	if err != nil {
 		panic(err)
 	}
@@ -212,7 +211,7 @@ func initialModel() model {
 		} else {
 			jid, ok := parseJID(conv.GetId())
 			if ok {
-				contact, _ := app.Store.GetContact(jid)
+				contact, _ := Store.GetContact(jid)
 				localItem := Item{title: contact.FullName, desc: contact.PushName}
 				listGroup = append(listGroup, localItem)
 			}
@@ -254,7 +253,7 @@ If you write a long message, it will automatically wrap :D
 	}
 }
 
-func NewProgram() {
+func NewTui() {
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Println("Error running program:", err)

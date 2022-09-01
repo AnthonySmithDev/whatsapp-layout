@@ -14,8 +14,8 @@ type Contact struct {
 	Email string `json:"email"`
 }
 
-//ID any struct that needs to persist should implement this function defined
-//in Entity interface.
+// ID any struct that needs to persist should implement this function defined
+// in Entity interface.
 func (c Customer) ID() (jsonField string, value interface{}) {
 	value = c.CustID
 	jsonField = "custid"
@@ -25,7 +25,7 @@ func (c Customer) ID() (jsonField string, value interface{}) {
 var Driver *db.Driver
 var err error
 
-func NewDatabase() {
+func Database() {
 	Driver, err = db.New("data")
 	if err != nil {
 		panic(err)
