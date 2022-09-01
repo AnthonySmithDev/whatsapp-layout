@@ -1,4 +1,4 @@
-package ws
+package app
 
 import (
 	"context"
@@ -13,10 +13,10 @@ import (
 	"github.com/mdp/qrterminal/v3"
 )
 
-func RunWs() *whatsmeow.Client {
+func Connect() *whatsmeow.Client {
 	// dbLog := waLog.Stdout("Database", "DEBUG", true)
 	// Make sure you add appropriate DB connector imports, e.g. github.com/mattn/go-sqlite3 for SQLite
-	container, err := sqlstore.New("sqlite3", "file:examplestore.db?_foreign_keys=on", nil)
+	container, err := sqlstore.New("sqlite3", "file:store.db?_foreign_keys=on", nil)
 	if err != nil {
 		panic(err)
 	}

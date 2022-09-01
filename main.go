@@ -1,12 +1,12 @@
 package main
 
 import (
+	"github.com/AnthonySmithDev/whatsapp-tui-layout/app"
 	"github.com/AnthonySmithDev/whatsapp-tui-layout/tui"
-	"github.com/AnthonySmithDev/whatsapp-tui-layout/ws"
 )
 
 func main() {
-	// channel := make(chan *whatsmeow.Client)
-	client := ws.RunWs()
+	client := app.Connect()
+	app.Handler(client)
 	tui.NewProgram(client)
 }
