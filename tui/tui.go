@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
 )
 
 type sessionState uint
@@ -180,6 +180,22 @@ func (m model) View() string {
 	)
 }
 
+func parseJID(arg string) (types.JID, bool) {
+	if arg[0] == '+' {
+		arg = arg[1:]
+	}
+	if !strings.ContainsRune(arg, '@') {
+		return types.NewJID(arg, types.DefaultUserServer), true
+	} else {
+		recipient, err := types.ParseJID(arg)
+		if err != nil {
+			return recipient, false
+		} else if recipient.User == "" {
+			return recipient, false
+		}
+		return recipient, true
+	}
+}
 func initialModel() model {
 	listGroup := []list.Item{}
 
@@ -190,8 +206,17 @@ func initialModel() model {
 	}
 
 	for _, conv := range conversations {
-		localItem := Item{title: conv.GetName(), desc: "description"}
-		listGroup = append(listGroup, localItem)
+		if conv.Name != nil {
+			localItem := Item{title: conv.GetName(), desc: conv.GetDescription()}
+			listGroup = append(listGroup, localItem)
+		} else {
+			jid, ok := parseJID(conv.GetId())
+			if ok {
+				contact, _ := app.Store.GetContact(jid)
+				localItem := Item{title: contact.FullName, desc: contact.PushName}
+				listGroup = append(listGroup, localItem)
+			}
+		}
 	}
 
 	ls := list.New(listGroup, list.NewDefaultDelegate(), 0, 0)
@@ -229,7 +254,7 @@ If you write a long message, it will automatically wrap :D
 	}
 }
 
-func NewProgram(client *whatsmeow.Client) {
+func NewProgram() {
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Println("Error running program:", err)

@@ -13,7 +13,10 @@ import (
 	"github.com/mdp/qrterminal/v3"
 )
 
-func Connect() *whatsmeow.Client {
+var Client *whatsmeow.Client
+var Store *sqlstore.SQLStore
+
+func Connect() {
 	// dbLog := waLog.Stdout("Database", "DEBUG", true)
 	// Make sure you add appropriate DB connector imports, e.g. github.com/mattn/go-sqlite3 for SQLite
 	container, err := sqlstore.New("sqlite3", "file:store.db?_foreign_keys=on", nil)
@@ -25,13 +28,14 @@ func Connect() *whatsmeow.Client {
 	if err != nil {
 		panic(err)
 	}
+	Store = sqlstore.NewSQLStore(container, *deviceStore.ID)
 	// clientLog := waLog.Stdout("Client", "INFO", true)
-	client := whatsmeow.NewClient(deviceStore, nil)
+	Client = whatsmeow.NewClient(deviceStore, nil)
 
-	if client.Store.ID == nil {
+	if Client.Store.ID == nil {
 		// No ID stored, new login
-		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
+		qrChan, _ := Client.GetQRChannel(context.Background())
+		err = Client.Connect()
 		if err != nil {
 			panic(err)
 		}
@@ -47,10 +51,9 @@ func Connect() *whatsmeow.Client {
 		}
 	} else {
 		// Already logged in, just connect
-		err = client.Connect()
+		err = Client.Connect()
 		if err != nil {
 			panic(err)
 		}
 	}
-	return client
 }

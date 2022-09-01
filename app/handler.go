@@ -3,7 +3,6 @@ package app
 import (
 	// "fmt"
 
-	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -33,6 +32,6 @@ func eventHandler(rawEvt interface{}) {
 	}
 }
 
-func Handler(client *whatsmeow.Client) {
-	client.AddEventHandler(eventHandler)
+func Handler() {
+	Client.AddEventHandler(eventHandler)
 }
