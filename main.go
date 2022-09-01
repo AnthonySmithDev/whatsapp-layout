@@ -5,8 +5,8 @@ import (
 )
 
 func main() {
-	app.Connect()
+	first := app.Connect()
 	app.Database()
 	app.Handler()
-	app.NewTui()
+	app.NewTui(first)
 }

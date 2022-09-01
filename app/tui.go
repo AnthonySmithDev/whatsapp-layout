@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -40,9 +41,10 @@ var (
 )
 
 type Item struct {
-	title, desc string
+	jid, title, desc string
 }
 
+func (i Item) JID() string         { return i.jid }
 func (i Item) Title() string       { return i.title }
 func (i Item) Description() string { return i.desc }
 func (i Item) FilterValue() string { return i.title }
@@ -98,8 +100,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			switch m.state {
 			case listView:
-				newitem := m.list.SelectedItem().(Item)
-				m.messages = append(m.messages, botStyle.Render("Bot: ")+newitem.Description())
+				listItem := m.list.SelectedItem().(Item)
+				conv := findById(listItem.JID())
+				for _, message := range conv.GetMessagesNew() {
+					text := message.GetMessage().GetMessage().GetConversation()
+					if message.GetMessage().GetKey().GetFromMe() {
+						m.messages = append(m.messages, youStyle.Render("You: ")+text)
+					} else {
+						jid := message.GetMessage().GetKey().GetRemoteJid()
+						if jid, ok := parseJID(jid); ok {
+							contact, _ := Store.GetContact(jid)
+							m.messages = append(m.messages, botStyle.Render(contact.FullName+": ")+text)
+						}
+					}
+				}
 				m.viewport.SetContent(strings.Join(m.messages, "\n"))
 				m.viewport.GotoBottom()
 			case textareaView:
@@ -195,30 +209,25 @@ func parseJID(arg string) (types.JID, bool) {
 		return recipient, true
 	}
 }
-func initialModel() model {
-	listGroup := []list.Item{}
 
-	var conversations []Conversation
-	err := Driver.Open(Conversation{}).Get().AsEntity(&conversations)
-	if err != nil {
-		panic(err)
+func initialModel(first bool) model {
+	if first {
+		time.Sleep(time.Second * 5)
 	}
+	items := []list.Item{}
 
-	for _, conv := range conversations {
-		if conv.Name != nil {
-			localItem := Item{title: conv.GetName(), desc: conv.GetDescription()}
-			listGroup = append(listGroup, localItem)
+	for _, conversation := range findAll() {
+		if conversation.IsGroup() {
+			// localItem := Item{jid: conv.GetId(), title: conv.GetName(), desc: conv.GetDescription()}
+			// listGroup = append(listGroup, localItem)
 		} else {
-			jid, ok := parseJID(conv.GetId())
-			if ok {
-				contact, _ := Store.GetContact(jid)
-				localItem := Item{title: contact.FullName, desc: contact.PushName}
-				listGroup = append(listGroup, localItem)
-			}
+			contact, _ := Store.GetContact(conversation.GetJID())
+			item := Item{jid: conversation.GetId(), title: contact.FullName, desc: contact.PushName}
+			items = append(items, item)
 		}
 	}
 
-	ls := list.New(listGroup, list.NewDefaultDelegate(), 0, 0)
+	ls := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	ls.Title = "My Fave Things"
 
 	ta := textarea.New()
@@ -253,9 +262,11 @@ If you write a long message, it will automatically wrap :D
 	}
 }
 
-func NewTui() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
-	if err := p.Start(); err != nil {
+var Tea *tea.Program
+
+func NewTui(first bool) {
+	Tea = tea.NewProgram(initialModel(first), tea.WithAltScreen())
+	if err := Tea.Start(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
 	}
