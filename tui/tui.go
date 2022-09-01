@@ -1,21 +1,18 @@
 package tui
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"strings"
 
+	"github.com/AnthonySmithDev/whatsapp-tui-layout/app"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/binary/proto"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 type sessionState uint
@@ -183,11 +180,17 @@ func (m model) View() string {
 	)
 }
 
-func initialModel(groups []*types.GroupInfo) model {
+func initialModel() model {
 	listGroup := []list.Item{}
 
-	for index, group := range groups {
-		localItem := Item{title: group.Name, desc: items[index].(Item).Description()}
+	var conversations []app.Conversation
+	err := app.Driver.Open(app.Conversation{}).Get().AsEntity(&conversations)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, conv := range conversations {
+		localItem := Item{title: conv.GetName(), desc: "description"}
 		listGroup = append(listGroup, localItem)
 	}
 
@@ -226,37 +229,8 @@ If you write a long message, it will automatically wrap :D
 	}
 }
 
-func eventHandler(rawEvt interface{}) {
-	switch evt := rawEvt.(type) {
-	case *events.Message:
-		fmt.Println("Received a message conv!", evt.Message.GetConversation())
-		fmt.Println("Received a message chat!", evt.Message.GetChat())
-	case *events.HistorySync:
-		switch evt.Data.GetSyncType() {
-		case proto.HistorySync_INITIAL_BOOTSTRAP:
-			fileName := fmt.Sprintf("history.json")
-			file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0600)
-			if err != nil {
-				panic("Failed to open file to write history sync: " + err.Error())
-			}
-			enc := json.NewEncoder(file)
-			enc.SetIndent("", "  ")
-			err = enc.Encode(evt.Data.GetConversations())
-			if err != nil {
-				panic("Failed to write history sync: " + err.Error())
-			}
-			_ = file.Close()
-		}
-	}
-}
-
 func NewProgram(client *whatsmeow.Client) {
-	client.AddEventHandler(eventHandler)
-	listGroup, err := client.GetJoinedGroups()
-	if err != nil {
-		panic("no get groups")
-	}
-	p := tea.NewProgram(initialModel(listGroup), tea.WithAltScreen())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)

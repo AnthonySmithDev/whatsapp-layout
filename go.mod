@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.5.0
 	github.com/mattn/go-sqlite3 v1.14.15
 	github.com/mdp/qrterminal/v3 v3.0.0
+	github.com/sonyarouje/simdb v0.1.0
 	go.mau.fi/whatsmeow v0.0.0-20220811191500-f650c10b0068
 )
 
