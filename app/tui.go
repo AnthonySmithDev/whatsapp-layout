@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type sessionState uint
@@ -24,8 +27,16 @@ const (
 )
 
 var (
-	youStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	botStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	stickerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	imageStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	audioStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	videoStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	linkStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+
+	youStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	defaulStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+
+	groupStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 
 	viewportStyle = lipgloss.NewStyle().
 			Padding(1, 2).
@@ -49,38 +60,14 @@ func (i Item) Title() string       { return i.title }
 func (i Item) Description() string { return i.desc }
 func (i Item) FilterValue() string { return i.title }
 
-var items = []list.Item{
-	Item{title: "Raspberry Pi’s", desc: "I have ’em all over my house"},
-	Item{title: "Nutella", desc: "It's good on toast"},
-	Item{title: "Bitter melon", desc: "It cools you down"},
-	Item{title: "Nice socks", desc: "And by that I mean socks without holes"},
-	Item{title: "Eight hours of sleep", desc: "I had this once"},
-	Item{title: "Cats", desc: "Usually"},
-	Item{title: "Plantasia, the album", desc: "My plants love it too"},
-	Item{title: "Pour over coffee", desc: "It takes forever to make though"},
-	Item{title: "VR", desc: "Virtual reality...what is there to say?"},
-	Item{title: "Noguchi Lamps", desc: "Such pleasing organic forms"},
-	Item{title: "Linux", desc: "Pretty much the best OS"},
-	Item{title: "Business school", desc: "Just kidding"},
-	Item{title: "Pottery", desc: "Wet clay is a great feeling"},
-	Item{title: "Shampoo", desc: "Nothing like clean hair"},
-	Item{title: "Table tennis", desc: "It’s surprisingly exhausting"},
-	Item{title: "Milk crates", desc: "Great for packing in your extra stuff"},
-	Item{title: "Afternoon tea", desc: "Especially the tea sandwich part"},
-	Item{title: "Stickers", desc: "The thicker the vinyl the better"},
-	Item{title: "20° Weather", desc: "Celsius, not Fahrenheit"},
-	Item{title: "Warm light", desc: "Like around 2700 Kelvin"},
-	Item{title: "The vernal equinox", desc: "The autumnal equinox is pretty good too"},
-	Item{title: "Gaffer’s tape", desc: "Basically sticky fabric"},
-	Item{title: "Terrycloth", desc: "In other words, towel fabric"},
-}
-
 type model struct {
 	state    sessionState
-	viewport viewport.Model
 	messages []string
-	textarea textarea.Model
+	convJID  string
+
 	list     list.Model
+	viewport viewport.Model
+	textarea textarea.Model
 }
 
 func (m model) Init() tea.Cmd {
@@ -95,29 +82,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
-			fmt.Println(m.textarea.Value())
 			return m, tea.Quit
 		case tea.KeyEnter:
 			switch m.state {
 			case listView:
 				listItem := m.list.SelectedItem().(Item)
-				conv := findById(listItem.JID())
-				for _, message := range conv.GetMessagesNew() {
-					text := message.GetMessage().GetMessage().GetConversation()
-					if message.GetMessage().GetKey().GetFromMe() {
-						m.messages = append(m.messages, youStyle.Render("You: ")+text)
-					} else {
-						jid := message.GetMessage().GetKey().GetRemoteJid()
-						if jid, ok := parseJID(jid); ok {
-							contact, _ := Store.GetContact(jid)
-							m.messages = append(m.messages, botStyle.Render(contact.FullName+": ")+text)
-						}
-					}
-				}
+				m.convJID = listItem.JID()
+				conversation := findById(listItem.JID())
+				m.messages = conversation.StylesMessages()
 				m.viewport.SetContent(strings.Join(m.messages, "\n"))
 				m.viewport.GotoBottom()
+				// change to textarea
+				m.state = textareaView
+				cmd = m.textarea.Focus()
+				cmds = append(cmds, cmd)
 			case textareaView:
 				if m.textarea.Value() != "" {
+					// Send message
+					jid, err := types.ParseJID(m.convJID)
+					if err != nil {
+						panic(err)
+					}
+					Client.SendMessage(context.Background(), jid, "", &waProto.Message{
+						Conversation: proto.String(m.textarea.Value()),
+					})
 					m.messages = append(m.messages, youStyle.Render("You: ")+m.textarea.Value())
 					m.viewport.SetContent(strings.Join(m.messages, "\n"))
 					m.textarea.Reset()
@@ -128,10 +116,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.state {
 			case listView:
 				m.state = viewportView
+				m.textarea.Blur()
 			case viewportView:
 				m.state = textareaView
+				// change to textarea
+				cmd = m.textarea.Focus()
+				cmds = append(cmds, cmd)
 			case textareaView:
 				m.state = listView
+				m.textarea.Blur()
 			}
 		}
 		switch m.state {
@@ -142,6 +135,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		case textareaView:
+			// if !m.textarea.Focused() {
+			// 	cmd = m.textarea.Focus()
+			// 	cmds = append(cmds, cmd)
+			// } else {
+			// 	m.textarea.Blur()
+			// }
 			m.textarea, cmd = m.textarea.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -193,38 +192,14 @@ func (m model) View() string {
 	)
 }
 
-func parseJID(arg string) (types.JID, bool) {
-	if arg[0] == '+' {
-		arg = arg[1:]
-	}
-	if !strings.ContainsRune(arg, '@') {
-		return types.NewJID(arg, types.DefaultUserServer), true
-	} else {
-		recipient, err := types.ParseJID(arg)
-		if err != nil {
-			return recipient, false
-		} else if recipient.User == "" {
-			return recipient, false
-		}
-		return recipient, true
-	}
-}
-
 func initialModel(first bool) model {
 	if first {
 		time.Sleep(time.Second * 5)
 	}
-	items := []list.Item{}
-
+	var items []list.Item
 	for _, conversation := range findAll() {
-		if conversation.IsGroup() {
-			// localItem := Item{jid: conv.GetId(), title: conv.GetName(), desc: conv.GetDescription()}
-			// listGroup = append(listGroup, localItem)
-		} else {
-			contact, _ := Store.GetContact(conversation.GetJID())
-			item := Item{jid: conversation.GetId(), title: contact.FullName, desc: contact.PushName}
-			items = append(items, item)
-		}
+		item := Item{jid: conversation.GetId(), title: conversation.Title(), desc: conversation.Desc()}
+		items = append(items, item)
 	}
 
 	ls := list.New(items, list.NewDefaultDelegate(), 0, 0)
@@ -232,9 +207,6 @@ func initialModel(first bool) model {
 
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
-	ta.Focus()
-
-	ta.Prompt = "┃ "
 	ta.CharLimit = 280
 
 	ta.SetWidth(100)
